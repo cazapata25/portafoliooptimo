@@ -1,0 +1,85 @@
+
+
+## ---------------------------------------------------------------------------
+## Teoria de portafolios - 2022-1
+## Funciones optimizacion de portafolios: Markowitz, Sharpe, Treynor
+## y evaluación de desempeño
+## @CpP- 2022
+## ---------------------------------------------------------------------------
+
+#Librerias
+import math
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+#!pip install yfinance
+import yfinance as yf
+
+## ---------------------------------------------------------------------------
+## Importar precios Yahoo Finance
+
+## Ej: para la informacion in-sample especificar:
+## activos = ["MA","AAPL","MSFT","GOOG","CVX","CAT","ABT","JNJ","MCD","HD"]
+## fechai = "2015-12-01"
+## fechaf = "2020-12-31"
+## periodicidad = "1Mo" 
+
+precios = yf.download(activos, start=fechai,end=fechaf, interval=periodicidad).dropna()
+retornos = np.log(precios["Adj Close"] / precios["Adj Close"].shift(1)).dropna()
+
+# Calculos MV
+mu = retornos.mean()
+sigma = retornos.std()
+cov = retornos.cov()
+
+# Formulación de Markowitz
+n = len(mu)
+ones = np.ones(n)
+x = np.transpose(mu) @ np.linalg.inv(cov) @ mu
+y = np.transpose(mu) @ np.linalg.inv(cov) @ ones
+z = np.transpose(ones) @ np.linalg.inv(cov) @ ones
+d = x*z - y**2
+g = (np.linalg.solve(cov,ones) * np.array(x)-np.linalg.solve(cov,mu)*np.array(y)) * 1/d
+h = (np.linalg.solve(cov,mu) * np.array(z)-np.linalg.solve(cov,ones)*np.array(y)) * 1/d
+
+nport = 100
+rp = np.linspace(min(mu), max(mu),num=nport)
+wpo = np.zeros((nport,n))
+sigmapo = np.zeros(nport)
+
+for i in range(1,nport):
+    wi = g+h*rp[i]
+    sigmapo[i] = np.sqrt(wi@cov@np.transpose(wi))
+    wpo[i] = wi
+
+#PMVG
+wpmvg = np.linalg.solve(cov,ones) * 1/z
+rpmvg = wpmv @ mu
+sigmapmvg = np.sqrt(wpmv@cov@np.transpose(wpmv))
+
+fig = plt.figure(figsize=(10,6))
+plt.bar(activos,wpmvg)
+plt.show()
+
+
+# Formulación de Sharpe
+rf = 0
+er = mu - rf
+zi = np.linalg.solve(cov,er)
+wpt = zi/sum(zi)
+rpt = wpt @ mu
+sigmapt = np.sqrt(wpt@cov@np.transpose(wpt))
+
+fig = plt.figure(figsize=(10,6))
+plt.bar(activos,wpt)
+plt.show()
+
+# Plano Riesgo-Retorno
+planoRR = plt.figure(figsize=(10,6))
+plt.scatter(sigma,mu)
+plt.scatter(sigmapo,rpo,color="blue")
+plt.scatter(sigmapmvg,rpmvg, color="red")
+plt.annotate("PMV",xy=(sigmapmvg,rpmvg),xytext =(sigmapmvg-0.005, rpmvg))
+plt.show()
