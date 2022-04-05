@@ -31,7 +31,7 @@ f.precios <- function(activos,fechai,fechaf,periodicidad){
 }
 
 ## ---------------------------------------------------------------------------
-## ---------------------------------------------------------------------------
+##-----------------------------------------------
 ## Programa optimizacion Media-Varianza (MV)
 ## Teoria de portafolios - 2022-1
 ## Con cortos (con pesos negativos): short=1
@@ -44,6 +44,7 @@ modeloMV <- function(ret){
     mu <- colMeans(ret)
     cov <- cov(ret)
     activos <- names(ret)
+
     # Optimizacion sin restricciones en cortos
     if(short == 1){
         ones <- rep(1,n)
@@ -82,6 +83,13 @@ modeloMV <- function(ret){
         rpt <- t(wpt)%*%mu
         sigmapt <- sqrt(t(wpt)%*%cov%*%wpt)
         wpmvg <- t(wpmvg)
+        # Portafoio con retorno objetivo
+        robj <- robj
+        wpobj <- g + h*robj
+        rownames(wpobj) <- activos
+        robjv <- t(wpobj)%*%mu
+        sigmapobj <- sqrt(t(wpobj)%*%cov%*%wpobj)
+        #rownames(wpmvg) <- activos
         wpt <- t(wpt)
         
         MV <- list()
@@ -94,64 +102,79 @@ modeloMV <- function(ret){
         MV[[7]] <- t(wpt)
         MV[[8]] <- rpt 
         MV[[9]] <- sigmapt
+        MV[[10]] <- wpobj
+        MV[[11]] <- robj
+        MV[[12]] <- sigmapobj
         return(MV)
     }
     # Con restricciones en corto
     else {
-        # FE    
-        library(quadprog)
-        if(min(mu) > 0){rpmin = min(mu)*1.1}
-        else{rpmin = 0.00}
-        rpmax <- max(mu)*0.99
-        n <- length(mu)
-        nport <- 1000
-        j <- seq(rpmin,rpmax,length=nport)
-        sigmapo <- matrix(0,nrow=nport)
-        wpo <- matrix(0,nrow=nport, ncol=n)
-        Amat <- t(rbind(rep(1,n),mu,diag(1,nrow=n)))
-        dvec <- rep(0,n) 
-        Dmat <- 2*cov
-        for(i in 1:nport){
-            bvec <- c(1,j[i],rep(0,n))
-            result <- solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=2)
-            wpo[i,] <- result$solution
-            sigmapo[i,] <- sqrt(result$value)
-        }
-        rpo <- j
-        colnames(wpo) <- c(activos)
-        # PMVG
-        pmvg <- cbind(sigmapo,wpo)
-        pmvg.sort <- pmvg[order(pmvg[,1]),]
-        pmvg.sel <- cbind(pmvg.sort[1,])
-        wpmvg <- cbind(round(pmvg.sel[2:length(pmvg.sel)],6))
-        rownames(wpmvg) <- c(activos)
-        rpmvg <- mu%*%wpmvg
-        sigmapmvg <- sqrt(t(wpmvg)%*%cov%*%wpmvg)
-        # Sharpe    
-        sharpe_port <- (rpo-rf)/sigmapo
-        sharpe <- cbind(sharpe_port,wpo)
-        sharpe.sort <- sharpe[order(-sharpe[,1]),]
-        sharpe.sel <- cbind(sharpe.sort[1,])
-        wpt <- round(cbind(sharpe.sel[2:length(sharpe.sel)]),6)
-        rownames(wpt) <- c(activos)
-        rpt <- mu%*%wpt
-        sigmapt <- sqrt(t(wpt)%*%cov%*%wpt)
-        
-        MV <- list()
-        MV[[1]] <- wpo
-        MV[[2]] <- rpo
-        MV[[3]] <- sigmapo
-        MV[[4]] <- wpmvg
-        MV[[5]] <- rpmvg
-        MV[[6]] <- sigmapmvg
-        MV[[7]] <- wpt
-        MV[[8]] <- rpt 
-        MV[[9]] <- sigmapt
-        return(MV)
+    # FE    
+    library(quadprog)
+    if(min(mu) > 0){rpmin = min(mu)*1.1}
+    else{rpmin = 0.00}
+    rpmax <- max(mu)*0.99
+    n <- length(mu)
+    nport <- 1000
+    j <- seq(rpmin,rpmax,length=nport)
+    sigmapo <- matrix(0,nrow=nport)
+    wpo <- matrix(0,nrow=nport, ncol=n)
+    Amat <- t(rbind(rep(1,n),mu,diag(1,nrow=n)))
+    dvec <- rep(0,n) 
+    Dmat <- 2*cov
+    for(i in 1:nport){
+      bvec <- c(1,j[i],rep(0,n))
+      result <- solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=2)
+      wpo[i,] <- result$solution
+      sigmapo[i,] <- sqrt(result$value)
+    }
+    rpo <- j
+    colnames(wpo) <- c(activos)
+    # PMVG
+    pmvg <- cbind(sigmapo,wpo)
+    pmvg.sort <- pmvg[order(pmvg[,1]),]
+    pmvg.sel <- cbind(pmvg.sort[1,])
+    wpmvg <- cbind(round(pmvg.sel[2:length(pmvg.sel)],6))
+    rownames(wpmvg) <- c(activos)
+    rpmvg <- mu%*%wpmvg
+    sigmapmvg <- sqrt(t(wpmvg)%*%cov%*%wpmvg)
+    # Sharpe    
+    sharpe_port <- (rpo-rf)/sigmapo
+    sharpe <- cbind(sharpe_port,wpo)
+    sharpe.sort <- sharpe[order(-sharpe[,1]),]
+    sharpe.sel <- cbind(sharpe.sort[1,])
+    wpt <- round(cbind(sharpe.sel[2:length(sharpe.sel)]),6)
+    rownames(wpt) <- c(activos)
+    rpt <- mu%*%wpt
+    sigmapt <- sqrt(t(wpt)%*%cov%*%wpt)
+    
+    # Portafolio ocn retorno objetivo
+    bvecobj <- c(1,robj,rep(0,n))
+    result <- solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvecobj,meq=2)
+    wpobj <- result$solution
+    wpobj <- round(wpobj,4)
+    names(wpobj) <- activos
+    sigmapobj <- sqrt(result$value)
+    
+    MV <- list()
+    MV[[1]] <- wpo
+    MV[[2]] <- rpo
+    MV[[3]] <- sigmapo
+    MV[[4]] <- wpmvg
+    MV[[5]] <- rpmvg
+    MV[[6]] <- sigmapmvg
+    MV[[7]] <- wpt
+    MV[[8]] <- rpt 
+    MV[[9]] <- sigmapt
+    MV[[10]] <- wpobj
+    MV[[11]] <- robj
+    MV[[12]] <- sigmapobj
+    return(MV)
     }
 }
 
 ## ---------------------------------------------------------------------------
+
 ## ---------------------------------------------------------------------------
 ## Programa optimización de Treynor
 ## -----------------------------------
@@ -200,6 +223,7 @@ m.treynor <- function(retornos,r.indice){
     return(MT)
 }
 
+## ---------------------------------------------------------------------------
 
 ##-----------------------------------------------
 ## Programa optimizacion Semi Media-Varianza (SMV)
@@ -325,6 +349,7 @@ m.sortino <- function(retornos,h){
     }
 }
 
+## ---------------------------------------------------------------------------
 
 ## -----------------------------------
 ## Funcion de optimizacion medida Omega
@@ -357,6 +382,8 @@ m.omega <- function(retornos,h){
     return(PO)
 }
 
+## ---------------------------------------------------------------------------
+
 ## -----------------------------------
 ## FUncion de optimizacion del CVaR
 ## -----------------------------------
@@ -388,6 +415,8 @@ m.cvar <- function(retornos,alpha){
     MCVAR[[3]] <- sigmapcvar
     return(MCVAR)
 }
+
+## ---------------------------------------------------------------------------
 
 # ---------------------------------------
 # Risk Parity optimization
